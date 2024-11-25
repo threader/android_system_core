@@ -311,6 +311,14 @@ on init
     write /proc/sys/kernel/hung_task_timeout_secs 0
     write /proc/cpu/alignment 4
 
+    write /proc/sys/fs/protected_hardlinks 1
+    write /proc/sys/fs/protected_symlinks 1
+
+    write /proc/sys/fs/protected_fifos 2
+    write /proc/sys/fs/protected_regular 2
+
+    write /proc/sys/dev/tty/ldisc_autoload 0
+
     # scheduler tunables
     # Disable auto-scaling of scheduler tunables with hotplug. The tunables
     # will vary across devices in unpredictable ways if allowed to scale with
@@ -1126,6 +1134,8 @@ on boot
     symlink /sys/class/block/${dev.mnt.dev.data} /dev/sys/block/by-name/userdata
     symlink /sys/class/block/${dev.mnt.rootdisk.data} /dev/sys/block/by-name/rootdisk
 
+    write /proc/sys/vm/max_map_count 1048576
+
     # F2FS tuning. Set cp_interval larger than dirty_expire_centisecs, 30 secs,
     # to avoid power consumption when system becomes mostly idle. Be careful
     # to make it too large, since it may bring userdata loss, if they
@@ -1235,6 +1245,21 @@ on property:perf.drop_caches=3
 # "tcp_default_init_rwnd" Is too long!
 on property:net.tcp_def_init_rwnd=*
     write /proc/sys/net/ipv4/tcp_default_init_rwnd ${net.tcp_def_init_rwnd}
+
+on property:persist.security.deny_new_usb=disabled
+    write /proc/sys/kernel/deny_new_usb 0
+
+on property:persist.security.deny_new_usb=enabled
+    write /proc/sys/kernel/deny_new_usb 1
+
+on property:persist.security.deny_new_usb=dynamic
+    write /proc/sys/kernel/deny_new_usb 1
+
+on property:security.deny_new_usb=*
+    write /proc/sys/kernel/deny_new_usb ${security.deny_new_usb}
+
+on property:security.deny_new_usb2=*
+    write /proc/sys/kernel/deny_new_usb2 ${security.deny_new_usb2}
 
 # perf_event_open syscall security:
 # Newer kernels have the ability to control the use of the syscall via SELinux

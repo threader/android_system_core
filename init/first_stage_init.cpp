@@ -209,9 +209,9 @@ std::string GetModuleLoadList(BootMode boot_mode, const std::string& dir_path) {
 }
 
 #define MODULE_BASE_DIR "/lib/modules"
-bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel,
+bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel, bool disable_usb_port,
                        int& modules_loaded) {
-    struct utsname uts {};
+    struct utsname uts{};
     if (uname(&uts)) {
         LOG(FATAL) << "Failed to get kernel version.";
     }
@@ -267,7 +267,7 @@ bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel
     for (const auto& module_dir : module_dirs) {
         std::string dir_path = MODULE_BASE_DIR "/";
         dir_path.append(module_dir);
-        Modprobe m({dir_path}, GetModuleLoadList(boot_mode, dir_path));
+        Modprobe m({dir_path}, GetModuleLoadList(boot_mode, dir_path), true, disable_usb_port);
         bool retval = m.LoadListedModules(!want_console);
         modules_loaded = m.GetModuleCount();
         if (modules_loaded > 0) {
@@ -276,7 +276,14 @@ bool LoadKernelModules(BootMode boot_mode, bool want_console, bool want_parallel
         }
     }
 
-    Modprobe m({MODULE_BASE_DIR}, GetModuleLoadList(boot_mode, MODULE_BASE_DIR));
+    if (disable_usb_port) {
+        if (auto res = WriteFile("/proc/sys/kernel/deny_new_usb2", "1"); res.ok()) {
+            LOG(INFO) << "wrote 1 to deny_new_usb2";
+        } else {
+            LOG(ERROR) << "write to deny_new_usb2 failed";
+        }
+    }
+    Modprobe m({MODULE_BASE_DIR}, GetModuleLoadList(boot_mode, MODULE_BASE_DIR), true, disable_usb_port);
     bool retval = (want_parallel) ? m.LoadModulesParallel(std::thread::hardware_concurrency())
                                   : m.LoadListedModules(!want_console);
     modules_loaded = m.GetModuleCount();
@@ -334,9 +341,9 @@ int FirstStageMain(int argc, char** argv) {
     CHECKCALL(mkdir("/dev/pts", 0755));
     CHECKCALL(mkdir("/dev/socket", 0755));
     CHECKCALL(mkdir("/dev/dm-user", 0755));
-    CHECKCALL(mount("devpts", "/dev/pts", "devpts", 0, NULL));
+    CHECKCALL(mount("devpts", "/dev/pts", "devpts", MS_NOSUID|MS_NOEXEC, NULL));
 #define MAKE_STR(x) __STRING(x)
-    CHECKCALL(mount("proc", "/proc", "proc", 0, "hidepid=2,gid=" MAKE_STR(AID_READPROC)));
+    CHECKCALL(mount("proc", "/proc", "proc", MS_NOSUID|MS_NODEV|MS_NOEXEC, "hidepid=2,gid=" MAKE_STR(AID_READPROC)));
 #undef MAKE_STR
     // Don't expose the raw commandline to unprivileged processes.
     CHECKCALL(chmod("/proc/cmdline", 0440));
@@ -348,7 +355,7 @@ int FirstStageMain(int argc, char** argv) {
     android::base::ReadFileToString("/proc/bootconfig", &bootconfig);
     gid_t groups[] = {AID_READPROC};
     CHECKCALL(setgroups(arraysize(groups), groups));
-    CHECKCALL(mount("sysfs", "/sys", "sysfs", 0, NULL));
+    CHECKCALL(mount("sysfs", "/sys", "sysfs", MS_NOSUID|MS_NODEV|MS_NOEXEC, NULL));
     CHECKCALL(mount("selinuxfs", "/sys/fs/selinux", "selinuxfs", 0, NULL));
 
     CHECKCALL(mknod("/dev/kmsg", S_IFCHR | 0600, makedev(1, 11)));
@@ -432,8 +439,9 @@ int FirstStageMain(int argc, char** argv) {
     boot_clock::time_point module_start_time = boot_clock::now();
     int module_count = 0;
     BootMode boot_mode = GetBootMode(cmdline, bootconfig);
+    bool disable_usb_port = boot_mode == BootMode::NORMAL_MODE;
     if (!LoadKernelModules(boot_mode, want_console,
-                           want_parallel, module_count)) {
+                           want_parallel, disable_usb_port, module_count)) {
         if (want_console != FirstStageConsoleParam::DISABLED) {
             LOG(ERROR) << "Failed to load kernel modules, starting console";
         } else {
