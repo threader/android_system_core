@@ -124,18 +124,11 @@ void OptimizedFlashSuperTask::Run() {
     if (int limit = get_sparse_limit(super_size_, fp_)) {
         files = resparse_file(sparse_layout_.get(), limit);
     } else {
-        if (has_flash_capturer()) {
-            die("unexpected sparse limit %i", limit);
-        }
         files.emplace_back(std::move(sparse_layout_));
     }
 
-    if (auto fc = flash_capturer()) {
-        fc->AddSplitSparsePartition("super", files);
-    } else {
-        // Send the data to the device.
-        flash_partition_files(super_name_, files);
-    }
+    // Send the data to the device.
+    flash_partition_files(super_name_, files);
 }
 
 std::string OptimizedFlashSuperTask::ToString() const {
@@ -199,19 +192,15 @@ std::unique_ptr<OptimizedFlashSuperTask> OptimizedFlashSuperTask::Initialize(
         super_name = "super";
     }
     uint64_t partition_size;
-    if (has_flash_capturer()) {
-        partition_size = fp->sparse_limit + 1;
-    } else {
-        std::string partition_size_str;
-        if (fp->fb->GetVar("partition-size:" + super_name, &partition_size_str) != fastboot::SUCCESS) {
-            LOG(VERBOSE) << "Cannot optimize super flashing: could not determine super partition";
-            return nullptr;
-        }
-        partition_size_str = fb_fix_numeric_var(partition_size_str);
-        if (!android::base::ParseUint(partition_size_str, &partition_size)) {
-            LOG(VERBOSE) << "Could not parse " << super_name << " size: " << partition_size_str;
-            return nullptr;
-        }
+    std::string partition_size_str;
+    if (fp->fb->GetVar("partition-size:" + super_name, &partition_size_str) != fastboot::SUCCESS) {
+        LOG(VERBOSE) << "Cannot optimize super flashing: could not determine super partition";
+        return nullptr;
+    }
+    partition_size_str = fb_fix_numeric_var(partition_size_str);
+    if (!android::base::ParseUint(partition_size_str, &partition_size)) {
+        LOG(VERBOSE) << "Could not parse " << super_name << " size: " << partition_size_str;
+        return nullptr;
     }
 
     std::unique_ptr<SuperFlashHelper> helper = std::make_unique<SuperFlashHelper>(*fp->source);
@@ -308,13 +297,6 @@ std::string DeleteTask::ToString() const {
 WipeTask::WipeTask(const FlashingPlan* fp, const std::string& pname) : fp_(fp), pname_(pname){};
 
 void WipeTask::Run() {
-    if (auto fc = flash_capturer()) {
-        std::string cmd = "erase " + pname_;
-        fc->AddCommand(cmd);
-        fc->AddShBatCommand("fastboot " + cmd);
-        return;
-    }
-
     std::string partition_type;
     if (fp_->fb->GetVar("partition-type:" + pname_, &partition_type) != fastboot::SUCCESS) {
         LOG(ERROR) << "wipe task partition not found: " << pname_;
