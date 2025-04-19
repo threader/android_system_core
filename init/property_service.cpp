@@ -1496,10 +1496,6 @@ static void PropertyServiceThread(int fd, bool listen_init) {
         }
     }
 
-    if (!IsMicrodroid()) {
-        auto_reboot_timer_init();
-    }
-
     while (true) {
         auto epoll_result = epoll.Wait(std::nullopt);
         if (!epoll_result.ok()) {
