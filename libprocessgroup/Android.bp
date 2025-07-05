@@ -53,8 +53,9 @@ cc_library {
         "libcgrouprc",
     ],
     static_libs: [
-        "libjsoncpp",
-        "libprocessgroup_util",
+        "libjsoncpp"
+       //,
+       // "libprocessgroup_util",
     ],
     // for cutils/android_filesystem_config.h
     header_libs: [
