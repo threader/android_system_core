@@ -28,7 +28,6 @@
 #include <android-base/strings.h>
 #include <cgroup_map.h>
 #include <processgroup/processgroup.h>
-#include <processgroup/util.h>
 
 using android::base::StartsWith;
 using android::base::StringPrintf;
@@ -217,13 +216,7 @@ int CgroupMap::ActivateControllers(const std::string& path) const {
         for (uint32_t i = 0; i < controller_count; ++i) {
             const ACgroupController* controller = ACgroupFile_getController(i);
             const uint32_t flags = ACgroupController_getFlags(controller);
-            uint32_t max_activation_depth = UINT32_MAX;
-            if (__builtin_available(android 36, *)) {
-                max_activation_depth = ACgroupController_getMaxActivationDepth(controller);
-            }
-            const int depth = util::GetCgroupDepth(ACgroupController_getPath(controller), path);
-
-            if (flags & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION && depth < max_activation_depth) {
+            if (flags & CGROUPRC_CONTROLLER_FLAG_NEEDS_ACTIVATION) {
                 std::string str("+");
                 str.append(ACgroupController_getName(controller));
                 if (!WriteStringToFile(str, path + "/cgroup.subtree_control")) {
